@@ -618,6 +618,89 @@ def sample_elevation_at_city(lon, lat, elevation_data, lons, lats):
     return elev
 
 # ====================================================================
+# HIGH RESOLUTION DEM UTILITIES FOR MINES
+# ====================================================================
+
+def load_highres_dem_for_mines(bbox, sand_mines):
+    """Load DEM for mine elevation calculations with caching support"""
+    if not sand_mines:
+        return None, None, None, {}
+
+    # Check cache for existing mine elevations
+    if IN_COLAB and os.path.exists(ELEVATION_CACHE_FILE) and not FORCE_RECALCULATE_ELEVATIONS:
+        try:
+            with open(ELEVATION_CACHE_FILE, "r") as f:
+                cache = json.load(f)
+            mine_cache = cache.get("mines", {})
+            all_present = True
+            for i, _ in enumerate(sand_mines):
+                if f"mine_{i+1}" not in mine_cache:
+                    all_present = False
+                    break
+            if all_present:
+                return None, None, None, mine_cache
+        except Exception as e:
+            progress_update(f"   ⚠️ Could not read cache: {str(e)}")
+
+    # Expand bbox slightly to ensure coverage
+    buffer = 0.02
+    expanded_bbox = {
+        "south": bbox["south"] - buffer,
+        "north": bbox["north"] + buffer,
+        "west": bbox["west"] - buffer,
+        "east": bbox["east"] + buffer,
+    }
+
+    dem_data, dem_lons, dem_lats = download_highres_dem(expanded_bbox)
+    return dem_data, dem_lons, dem_lats, None
+
+
+def calculate_and_save_mine_elevations(sand_mines, dem_data, dem_lons, dem_lats):
+    """Calculate average mine elevations and update cache"""
+    results = {}
+
+    for i, mine in enumerate(sand_mines):
+        mine_coords = mine["coordinates"]
+        elevs = []
+        for j, lat in enumerate(dem_lats):
+            for k, lon in enumerate(dem_lons):
+                if point_in_polygon(lon, lat, mine_coords):
+                    val = dem_data[j, k]
+                    if not np.isnan(val):
+                        elevs.append(val)
+
+        if elevs:
+            avg = float(np.mean(elevs))
+            points = len(elevs)
+        else:
+            center_lon = sum(c[0] for c in mine_coords) / len(mine_coords)
+            center_lat = sum(c[1] for c in mine_coords) / len(mine_coords)
+            center_elev = sample_dem_at_point(center_lon, center_lat, dem_data, dem_lons, dem_lats, 85.0)
+            avg = float(center_elev)
+            points = 1 if center_elev != 85.0 else 0
+
+        results[f"mine_{i+1}"] = {
+            "average_elevation_ft": avg,
+            "sample_points": points,
+            "name": mine.get("name", f"Mine {i+1}"),
+        }
+
+    if IN_COLAB:
+        try:
+            cache_data = {}
+            if os.path.exists(ELEVATION_CACHE_FILE):
+                with open(ELEVATION_CACHE_FILE, "r") as f:
+                    cache_data = json.load(f)
+            cache_data.setdefault("mines", {})
+            cache_data["mines"].update(results)
+            with open(ELEVATION_CACHE_FILE, "w") as f:
+                json.dump(cache_data, f, indent=2)
+        except Exception as e:
+            progress_update(f"   ⚠️ Could not update mine cache: {str(e)}")
+
+    return results
+
+# ====================================================================
 # NASA ELEVATION DATA FROM OPENTOPOGRAPHY API
 # ====================================================================
 
@@ -749,6 +832,7 @@ def load_nasa_opentopo_elevation_data(bbox, api_key):
             raise Exception("NASA data not available and NASA_ONLY_MODE is enabled")
         return None, None, None, None
     
+    nasa_file = None
     try:
         progress_update(f"   • Using {nasa_demtype} from OpenTopography API")
         
@@ -1766,7 +1850,7 @@ def create_surface_with_cities_and_mines(elevation_data, lons, lats, stats, terr
                 label_elevation = city['ground_elevation'] + 30.0
         
         if min_dist > 0.5:  # No nearby city, use default
-            label_elevation = 80.0</        
+            label_elevation = 80.0
         # Add black shadow for geographic labels
         shadow_offsets = [
             (0.00001, 0.00001), (-0.00001, 0.00001),
