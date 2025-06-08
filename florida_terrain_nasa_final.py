@@ -1766,7 +1766,7 @@ def create_surface_with_cities_and_mines(elevation_data, lons, lats, stats, terr
                 label_elevation = city['ground_elevation'] + 30.0
         
         if min_dist > 0.5:  # No nearby city, use default
-            label_elevation = 80.0</        
+            label_elevation = 80.0
         # Add black shadow for geographic labels
         shadow_offsets = [
             (0.00001, 0.00001), (-0.00001, 0.00001),
