@@ -1747,7 +1747,7 @@ def create_surface_with_cities_and_mines(elevation_data, lons, lats, stats, terr
     # Add geographic labels
     progress_update("   • Adding geographic labels...")
     geographic_labels = [
-        {'name': 'Gulf of Mexico', 'lat': 28.383468, 'lon': -82.840814, 'color': 'aqua', 'size': 16},
+        {'name': 'Gulf of America', 'lat': 28.383468, 'lon': -82.840814, 'color': 'aqua', 'size': 16},
         {'name': 'Atlantic Ocean', 'lat': 28.886345, 'lon': -80.619742, 'color': 'aqua', 'size': 16},
         {'name': 'Tampa Bay', 'lat': 27.85, 'lon': -82.6, 'color': 'gold', 'size': 14}
     ]
